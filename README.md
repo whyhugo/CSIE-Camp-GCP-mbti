@@ -1,0 +1,1 @@
+# MBTI analysis from chat transcripts using GCP - NTNU CSIE Camp
