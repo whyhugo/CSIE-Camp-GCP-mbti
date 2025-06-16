@@ -3,19 +3,17 @@ import re
 import json
 from io import BytesIO
 
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
+import vertexai
+from vertexai.generative_models import GenerativeModel, Part, GenerationConfig
+from vertexai.preview.vision_models import ImageGenerationModel
 
 import functions_framework
 from flask import jsonify
-
-# Vertex AI SDK 是我們現在的核心
-import vertexai
-from vertexai.preview.language_models import TextGenerationModel
-from vertexai.preview.vision_models import ImageGenerationModel
-
 from google.cloud import language_v2, storage
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from wordcloud import WordCloud
 
 # --- 全域設定 ---
 PROJECT_ID = os.environ.get("GCP_PROJECT", "your-local-project-id") 
@@ -52,19 +50,15 @@ def mbti_analyzer(request):
         return jsonify({"error": "清理後無有效對話內容"}), 400, headers
 
     try:
-        # 1. 呼叫 Gemini 進行分析並"順便"生成圖像提示詞
         gemini_result = analyze_and_create_image_prompt(cleaned_log, user_name)
         image_prompt_for_imagen = gemini_result.get("image_prompt", "A cute, abstract character representing a creative personality.")
 
-        # 2. 呼叫 Imagen 生成圖像
         image_buffer = generate_image_with_imagen(image_prompt_for_imagen)
         avatar_url = upload_to_gcs(image_buffer, f"mbti-character-{user_name}-{os.urandom(4).hex()}.png")
         
-        # 3. 為詞彙雲分析關鍵字
         keywords = analyze_text_entities(cleaned_log, user_name)
         wordcloud_url = generate_and_upload_wordcloud(keywords, user_name)
 
-        # 4. 組合最終結果
         final_response = {
             "mbtiResult": gemini_result,
             "wordcloudUrl": wordcloud_url,
@@ -73,22 +67,20 @@ def mbti_analyzer(request):
         return jsonify(final_response), 200, headers
 
     except Exception as e:
+        import traceback
         print(f"發生嚴重錯誤: {e}")
+        traceback.print_exc()
         return jsonify({"error": f"後端分析服務發生錯誤: {e}"}), 500, headers
 
 def analyze_and_create_image_prompt(full_log: str, user_name: str) -> dict:
     """
-    使用 Gemini Pro 進行分析，並生成專屬的 AI 繪圖提示詞。
+    使用新版 SDK (GenerativeModel) 進行分析，並生成專屬的 AI 繪圖提示詞。
     """
-    # 注意：Gemini 1.0 Pro 模型已由 gemini-1.5-flash-001 取代，這裡使用較新的模型
-    model = TextGenerationModel.from_pretrained("gemini-1.5-flash-001")
+    model = GenerativeModel("gemini-1.5-flash-001")
 
-    # 生成圖像提示詞的任務 ▼▼▼
     prompt = f"""
     ROLE: 你是一位結合了心理學專業與圖像生成詠唱專家(Prompt Engineer)的AI。
-
     PRIMARY TASK: 請依據下方提供的對話紀錄，針對使用者「{user_name}」，完成兩項任務。
-
     ---
     任務一：性格分析
     1.  根據「{user_name}」在對話中的發言、語氣和互動模式，推斷出其最可能的 MBTI 人格類型。
@@ -100,7 +92,6 @@ def analyze_and_create_image_prompt(full_log: str, user_name: str) -> dict:
     - **Primary Style**: The main style must be 'a cute, blocky, 3D voxel character, similar to Minecraft or Crossy Road style, cinematic lighting, simple colored background'.
     - **Character Details**: Describe the character's appearance, clothing, and a key item they are holding or interacting with that reflects their personality (e.g., a book for an INTP, a paintbrush for an ISFP, a microphone for an ENFP).
     - **Mood & Expression**: Describe the character's facial expression and the overall mood of the scene (e.g., 'a focused expression while reading a book', 'a joyful expression while singing').
-
     ---
     OUTPUT FORMAT: 你必須嚴格按照以下 JSON 格式回傳，不得包含任何 JSON 結構外的文字。
     ```json
@@ -115,36 +106,28 @@ def analyze_and_create_image_prompt(full_log: str, user_name: str) -> dict:
       "image_prompt": "string"
     }}
     ```
-
     ---
     對話紀錄:
     ```
     {full_log}
     ```
     """
-    response = model.predict(prompt, temperature=0.7, max_output_tokens=1024)
-    json_string = response.text.replace("```json", "").replace("```", "").strip()
-    return json.loads(json_string)
-
-def generate_image_with_imagen(prompt: str) -> BytesIO:
-    """
-    使用 Vertex AI Imagen (文生圖模型) 根據提示詞生成圖像。
-    """
-    model = ImageGenerationModel.from_pretrained("imagegeneration@005") # 使用較新的模型版本
     
-    # 執行生成
-    response = model.generate_images(
-        prompt=prompt,
-        number_of_images=1,
-        # 可以加入負向提示詞來避免不想要的元素
-        # negative_prompt="text, watermark, ugly, deformed" 
+    generation_config = GenerationConfig(
+        temperature=0.7,
+        max_output_tokens=2048,
+        response_mime_type="application/json",
     )
     
-    # 將圖像數據存入記憶體緩衝區
-    image_bytes = response.images[0]._image_bytes
-    image_buffer = BytesIO(image_bytes)
+    response = model.generate_content(prompt, generation_config=generation_config)
     
-    return image_buffer
+    return json.loads(response.text)
+
+def generate_image_with_imagen(prompt: str) -> BytesIO:
+    model = ImageGenerationModel.from_pretrained("imagegeneration@005")
+    response = model.generate_images(prompt=prompt, number_of_images=1)
+    image_bytes = response.images[0]._image_bytes
+    return BytesIO(image_bytes)
 
 def clean_chat_log(text: str) -> str:
     lines = text.strip().split('\n')
@@ -180,8 +163,6 @@ def upload_to_gcs(buffer: BytesIO, filename: str) -> str:
     return blob.public_url
 
 def generate_and_upload_wordcloud(keywords: dict, filename_prefix: str) -> str:
-    from wordcloud import WordCloud
-    import matplotlib.pyplot as plt
     if not keywords: return ""
     wordcloud = WordCloud(width=800, height=400, background_color='white', font_path=None).generate_from_frequencies(keywords)
     buf = BytesIO(); plt.figure(figsize=(10, 5)); plt.imshow(wordcloud, interpolation='bilinear'); plt.axis('off'); plt.savefig(buf, format='png'); plt.close(); buf.seek(0)
