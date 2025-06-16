@@ -3,6 +3,10 @@ import re
 import json
 from io import BytesIO
 
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
 import functions_framework
 from flask import jsonify
 
