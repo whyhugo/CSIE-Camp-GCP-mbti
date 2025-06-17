@@ -154,29 +154,99 @@ def clean_chat_log(text: str) -> str:
             cleaned_lines.append(cleaned_line)
     return "\n".join(cleaned_lines)
 
+def clean_keywords_for_wordcloud(keywords: dict) -> dict:
+    """
+    清理關鍵詞字典，移除包含換行符或其他多行字符的詞彙，
+    以避免 WordCloud 的 "anchor not supported for multiline text" 錯誤
+    """
+    cleaned_keywords = {}
+    for word, frequency in keywords.items():
+        # 移除包含換行符的詞彙
+        if '\n' in word or '\r' in word:
+            continue
+        # 移除空字符串或只包含空格的詞彙
+        if not word or not word.strip():
+            continue
+        # 替換可能導致問題的字符
+        clean_word = word.replace('\t', ' ').strip()
+        # 確保詞彙不為空且不包含特殊字符
+        if clean_word and len(clean_word.strip()) > 0:
+            cleaned_keywords[clean_word] = frequency
+    
+    return cleaned_keywords
+
 def analyze_text_entities(full_log: str, user_name: str) -> dict:
     user_lines = [line.replace(f"{user_name} ", "", 1) for line in full_log.split('\n') if line.startswith(user_name + " ")]
     if not user_lines:
         return {}
     my_text_only = "\n".join(user_lines)
     document = language_v2.Document(content=my_text_only, type_=language_v2.Document.Type.PLAIN_TEXT)
-    response = language_client.analyze_entities(document=document)
     
-    # 使用 entity.mentions 長度作為詞雲的權重
-    return {
-        entity.name: getattr(entity, "importance", len(entity.mentions) if entity.mentions else 1)
-        for entity in response.entities[:30]
-    }
+    try:
+        response = language_client.analyze_entities(document=document)
+        
+        # 使用 entity.mentions 長度作為詞雲的權重
+        raw_keywords = {
+            entity.name: getattr(entity, "importance", len(entity.mentions) if entity.mentions else 1)
+            for entity in response.entities[:30]
+        }
+        
+        # 清理關鍵詞以避免 WordCloud 錯誤
+        return clean_keywords_for_wordcloud(raw_keywords)
+        
+    except Exception as e:
+        print(f"實體分析失敗: {e}")
+        return {}
 
 def upload_to_gcs(buffer: BytesIO, filename: str) -> str:
-    bucket = storage_client.bucket(BUCKET_NAME)
-    blob = bucket.blob(f"results/{filename}")
-    blob.upload_from_file(buffer, content_type='image/png')
-    return blob.public_url
+    try:
+        bucket = storage_client.bucket(BUCKET_NAME)
+        blob = bucket.blob(f"results/{filename}")
+        blob.upload_from_file(buffer, content_type='image/png')
+        return blob.public_url
+    except Exception as e:
+        print(f"上傳到 GCS 失敗: {e}")
+        return ""
 
 def generate_and_upload_wordcloud(keywords: dict, filename_prefix: str) -> str:
-    if not keywords: return ""
-    wordcloud = WordCloud(width=800, height=400, background_color='white', font_path=None).generate_from_frequencies(keywords)
-    buf = BytesIO(); plt.figure(figsize=(10, 5)); plt.imshow(wordcloud, interpolation='bilinear'); plt.axis('off'); plt.savefig(buf, format='png'); plt.close(); buf.seek(0)
-    filename = f"wordcloud-{filename_prefix}-{os.urandom(4).hex()}.png"
-    return upload_to_gcs(buf, filename)
+    if not keywords: 
+        print("沒有關鍵詞可生成詞雲")
+        return ""
+    
+    try:
+        # 額外的安全檢查：確保所有關鍵詞都是單行文本
+        safe_keywords = {k: v for k, v in keywords.items() if isinstance(k, str) and '\n' not in k and '\r' not in k and k.strip()}
+        
+        if not safe_keywords:
+            print("清理後沒有有效的關鍵詞")
+            return ""
+        
+        # 創建詞雲時使用更保守的參數
+        wordcloud = WordCloud(
+            width=800, 
+            height=400, 
+            background_color='white', 
+            font_path=None,
+            max_words=100,  # 限制詞彙數量
+            relative_scaling=0.5,  # 調整字體大小比例
+            colormap='viridis'
+        ).generate_from_frequencies(safe_keywords)
+        
+        # 生成圖片
+        buf = BytesIO()
+        plt.figure(figsize=(10, 5))
+        plt.imshow(wordcloud, interpolation='bilinear')
+        plt.axis('off')
+        plt.tight_layout(pad=0)
+        plt.savefig(buf, format='png', bbox_inches='tight', dpi=150)
+        plt.close()
+        buf.seek(0)
+        
+        filename = f"wordcloud-{filename_prefix}-{os.urandom(4).hex()}.png"
+        return upload_to_gcs(buf, filename)
+        
+    except Exception as e:
+        print(f"生成詞雲失敗: {e}")
+        import traceback
+        traceback.print_exc()
+        return ""
