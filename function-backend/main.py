@@ -22,7 +22,7 @@ import google.auth
 _, default_project = google.auth.default()
 
 PROJECT_ID = os.getenv("GCP_PROJECT", default_project)
-LOCATION = os.getenv("GCP_LOCATION", "asia-east1")
+LOCATION = os.getenv("GCP_LOCATION", "us-central1")
 BUCKET_NAME = os.getenv("GCP_BUCKET", "csiecamp-mbti-test")
 
 
