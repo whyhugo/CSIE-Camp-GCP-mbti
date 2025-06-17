@@ -226,7 +226,7 @@ def generate_and_upload_wordcloud(keywords: dict, filename_prefix: str) -> str:
             width=800, 
             height=400, 
             background_color='white', 
-            font_path=None,
+            font_path="NotoSansTC-VariableFont_wght.ttf", 
             max_words=100,  # 限制詞彙數量
             relative_scaling=0.5,  # 調整字體大小比例
             colormap='viridis'
