@@ -16,9 +16,15 @@ import matplotlib.pyplot as plt
 from wordcloud import WordCloud
 
 # --- 全域設定 ---
-PROJECT_ID = os.environ.get("GCP_PROJECT", "your-local-project-id") 
-LOCATION = "asia-east1"
-BUCKET_NAME = "csiecamp-mbti-test" 
+import google.auth
+
+# 嘗試取得 GCP 預設 project_id
+_, default_project = google.auth.default()
+
+PROJECT_ID = os.getenv("GCP_PROJECT", default_project)
+LOCATION = os.getenv("GCP_LOCATION", "asia-east1")
+BUCKET_NAME = os.getenv("GCP_BUCKET", "csiecamp-mbti-test")
+
 
 # 初始化 Vertex AI 和其他 GCP 用戶端
 vertexai.init(project=PROJECT_ID, location=LOCATION)
