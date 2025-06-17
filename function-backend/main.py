@@ -82,7 +82,7 @@ def analyze_and_create_image_prompt(full_log: str, user_name: str) -> dict:
     """
     使用新版 SDK (GenerativeModel) 進行分析，並生成專屬的 AI 繪圖提示詞。
     """
-    model = GenerativeModel("gemini-1.0-pro-001")
+    model = GenerativeModel("gemini-2.0-flash")
 
     prompt = f"""
     ROLE: 你是一位結合了心理學專業與圖像生成詠唱專家(Prompt Engineer)的AI。
