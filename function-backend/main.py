@@ -156,11 +156,17 @@ def clean_chat_log(text: str) -> str:
 
 def analyze_text_entities(full_log: str, user_name: str) -> dict:
     user_lines = [line.replace(f"{user_name} ", "", 1) for line in full_log.split('\n') if line.startswith(user_name + " ")]
-    if not user_lines: return {}
+    if not user_lines:
+        return {}
     my_text_only = "\n".join(user_lines)
     document = language_v2.Document(content=my_text_only, type_=language_v2.Document.Type.PLAIN_TEXT)
     response = language_client.analyze_entities(document=document)
-    return {entity.name: entity.importance for entity in response.entities[:30]}
+    
+    # 使用 entity.mentions 長度作為詞雲的權重
+    return {
+        entity.name: getattr(entity, "importance", len(entity.mentions) if entity.mentions else 1)
+        for entity in response.entities[:30]
+    }
 
 def upload_to_gcs(buffer: BytesIO, filename: str) -> str:
     bucket = storage_client.bucket(BUCKET_NAME)
