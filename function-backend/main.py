@@ -23,7 +23,7 @@ _, default_project = google.auth.default()
 
 PROJECT_ID = os.getenv("GCP_PROJECT", default_project)
 LOCATION = os.getenv("GCP_LOCATION", "us-central1")
-BUCKET_NAME = os.getenv("GCP_BUCKET", " csiecamp-mbti-test-us-central1")
+BUCKET_NAME = os.getenv("GCP_BUCKET", "csiecamp-mbti-test-us-central1")
 
 
 # 初始化 Vertex AI 和其他 GCP 用戶端
@@ -160,7 +160,7 @@ def analyze_text_entities(full_log: str, user_name: str) -> dict:
     my_text_only = "\n".join(user_lines)
     document = language_v2.Document(content=my_text_only, type_=language_v2.Document.Type.PLAIN_TEXT)
     response = language_client.analyze_entities(document=document)
-    return {entity.name: entity.salience for entity in response.entities[:30]}
+    return {entity.name: entity.importance for entity in response.entities[:30]}
 
 def upload_to_gcs(buffer: BytesIO, filename: str) -> str:
     bucket = storage_client.bucket(BUCKET_NAME)
