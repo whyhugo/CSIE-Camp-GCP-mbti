@@ -141,7 +141,7 @@ def clean_chat_log(text: str) -> str:
     skip_patterns = [
         re.compile(r"^\d{4}\.\d{2}\.\d{2}\s\w+$"), 
         re.compile(r"^(Stickers|Photos|Videos)$"),
-        re.compile(r"^(貼圖|圖片|影片|照片)$"),
+        re.compile(r"^(貼圖|圖片|影片)$"),
         re.compile(r"^https?://\S+$"), 
         re.compile(r"^[\+\=\-\s]*$"),
     ]
