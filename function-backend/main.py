@@ -18,7 +18,7 @@ from wordcloud import WordCloud
 # --- 全域設定 ---
 import google.auth
 
-# 嘗試取得 GCP 預設 project_id
+# 取得 GCP 預設 project_id
 _, default_project = google.auth.default()
 
 PROJECT_ID = os.getenv("GCP_PROJECT", default_project)
