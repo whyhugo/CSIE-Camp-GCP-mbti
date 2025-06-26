@@ -23,7 +23,7 @@ _, default_project = google.auth.default()
 
 PROJECT_ID = os.getenv("GCP_PROJECT", default_project)
 LOCATION = os.getenv("GCP_LOCATION", "us-central1")
-BUCKET_NAME = os.getenv("GCP_BUCKET", "csiecamp-mbti-test-us-central1")
+BUCKET_NAME = os.getenv("GCP_BUCKET", "csiecamp-mbti-pictures")
 
 
 # 初始化 Vertex AI 和其他 GCP 用戶端
